@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
+const ytdl = require('ytdl-core');
 const fs = require('fs');
 const path = require('path');
 
@@ -104,16 +105,34 @@ async function getTrailerFromTmdb(tmdbId) {
   }
 }
 
+// Helper: get direct video URL from YouTube
+async function getDirectVideoUrl(videoId) {
+  try {
+    const info = await ytdl.getInfo(videoId);
+    const format = info.formats.find(
+      (f) =>
+        f.container === 'mp4' &&
+        f.hasVideo &&
+        f.hasAudio &&
+        f.qualityLabel.includes('720p')
+    );
+
+    if (!format) {
+      return null;
+    }
+
+    return format.url;
+  } catch (error) {
+    console.error('Failed to get direct URL:', error.message);
+    return null;
+  }
+}
+
 // Stream endpoint for trailer
 app.get('/stream/:type/:id.json', async (req, res) => {
   try {
     const { type, id } = req.params;
     console.log(`Received stream request for ${type} with ID: ${id}`);
-
-    if (!TMDB_API_KEY) {
-      console.error('TMDB API key is not set');
-      return res.status(500).json({ error: 'TMDB API key is not configured' });
-    }
 
     // Support both movies and series
     if (type !== 'movie' && type !== 'series') {
@@ -144,79 +163,29 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Try to get direct streams from Invidious
-    try {
-      const invidiousResponse = await axios.get(
-        `https://inv.vern.cc/api/v1/videos/${videoId}`,
-        {
-          timeout: 5000,
-        }
-      );
+    // Get direct video URL
+    const directUrl = await getDirectVideoUrl(videoId);
 
-      const { formatStreams = [] } = invidiousResponse.data;
+    if (!directUrl) {
+      return res.json({ streams: [] });
+    }
 
-      // Filter and sort streams
-      const mp4Streams = formatStreams
-        .filter(
-          (stream) =>
-            stream.container === 'mp4' &&
-            stream.url.startsWith('https://') &&
-            !stream.url.includes('googlevideo.com') // These URLs expire quickly
-        )
-        .sort((a, b) => parseInt(b.quality) - parseInt(a.quality))
-        .slice(0, 3); // Only take top 3 qualities
-
-      if (mp4Streams.length === 0) {
-        // If no direct streams, try alternative Invidious instance
-        return res.json({
-          streams: [
-            {
-              name: 'Trailer',
-              title: 'Trailer',
-              url: `https://vid.puffyan.us/latest_version?id=${videoId}&itag=22`,
-              type: 'trailer',
-              source: 'youtube',
-              behaviorHints: {
-                notWebReady: false,
-                ios_supports: true,
-              },
-            },
-          ],
-        });
-      }
-
-      const streams = mp4Streams.map((stream) => ({
-        name: `Trailer (${stream.quality}p)`,
-        title: `Trailer ${stream.quality}p`,
-        url: stream.url,
+    const streams = [
+      {
+        name: 'Trailer (720p)',
+        title: 'Trailer',
+        url: directUrl,
         type: 'trailer',
         source: 'youtube',
         behaviorHints: {
           notWebReady: false,
           ios_supports: true,
         },
-      }));
+      },
+    ];
 
-      console.log('Returning streams:', JSON.stringify(streams, null, 2));
-      res.json({ streams });
-    } catch (error) {
-      console.error('Failed to get Invidious streams:', error.message);
-      // Fallback to alternative Invidious instance
-      const streams = [
-        {
-          name: 'Trailer',
-          title: 'Trailer',
-          url: `https://vid.puffyan.us/latest_version?id=${videoId}&itag=22`,
-          type: 'trailer',
-          source: 'youtube',
-          behaviorHints: {
-            notWebReady: false,
-            ios_supports: true,
-          },
-        },
-      ];
-      res.json({ streams });
-    }
+    console.log('Returning streams:', JSON.stringify(streams, null, 2));
+    res.json({ streams });
   } catch (error) {
     console.error('Detailed error (stream):', {
       message: error.message,
