@@ -147,57 +147,53 @@ app.get('/stream/:type/:id.json', async (req, res) => {
 
       // Try multiple instances
       const instances = [
-        {
-          url: 'https://invidious.snopyta.org',
-          type: 'invidious',
-        },
-        {
-          url: 'https://inv.vern.cc',
-          type: 'invidious',
-        },
-        {
-          url: 'https://invidious.flokinet.to',
-          type: 'invidious',
-        },
-        {
-          url: 'https://invidious.privacydev.net',
-          type: 'invidious',
-        },
+        { url: 'https://invidious.snopyta.org', type: 'invidious' },
+        { url: 'https://inv.vern.cc', type: 'invidious' },
+        { url: 'https://invidious.flokinet.to', type: 'invidious' },
+        { url: 'https://invidious.privacydev.net', type: 'invidious' },
+        { url: 'https://invidious.projectsegfau.lt', type: 'invidious' },
+        { url: 'https://invidious.tiekoetter.com', type: 'invidious' },
+        { url: 'https://invidious.nerdvpn.de', type: 'invidious' },
       ];
 
       const streams = [];
 
       for (const instance of instances) {
         try {
-          console.log(`Trying ${instance.type} instance: ${instance.url}`);
-
+          console.log(`Trying invidious instance: ${instance.url}`);
           const url = `${instance.url}/api/v1/videos/${videoId}`;
           console.log(`Requesting URL: ${url}`);
-
           const response = await axios.get(url, {
             timeout: 5000,
             validateStatus: (status) => status === 200,
           });
-
           console.log(`Got response from ${instance.url}`);
 
-          if (response.data && response.data.formatStreams) {
-            console.log(
-              `Found ${response.data.formatStreams.length} format streams`
-            );
+          // Print all formatStreams and adaptiveFormats
+          if (response.data) {
+            if (response.data.formatStreams) {
+              console.log('formatStreams:', response.data.formatStreams);
+            }
+            if (response.data.adaptiveFormats) {
+              console.log('adaptiveFormats:', response.data.adaptiveFormats);
+            }
+          }
 
-            // Try to find HD or SD quality
-            const format = response.data.formatStreams.find(
-              (f) =>
-                f.quality === '720p' ||
-                f.quality === '480p' ||
-                f.quality === '360p'
-            );
+          // Try all formatStreams
+          const allFormats = [
+            ...(response.data.formatStreams || []),
+            ...(response.data.adaptiveFormats || []),
+          ];
 
-            if (format && format.url) {
-              console.log(`Found stream with quality: ${format.quality}`);
+          for (const format of allFormats) {
+            if (format.url) {
+              console.log(
+                `Found stream: quality=${
+                  format.quality || 'unknown'
+                }, url=${format.url.substring(0, 40)}...`
+              );
               streams.push({
-                name: `Trailer (${format.quality})`,
+                name: `Trailer (${format.quality || 'unknown'})`,
                 title: 'Official Trailer',
                 url: format.url,
                 type: 'trailer',
@@ -207,16 +203,17 @@ app.get('/stream/:type/:id.json', async (req, res) => {
                   bingeGroup: 'trailer',
                 },
               });
-
-              // If we found a good quality stream, we can stop here
-              if (format.quality === '720p') {
-                console.log('Found HD stream, stopping search');
-                break;
-              }
+              // נחזיר את הראשון שמצאנו
+              break;
             }
+          }
+
+          if (streams.length > 0) {
+            console.log('Found at least one stream, stopping search');
+            break;
           } else {
             console.log(
-              `No format streams found in response from ${instance.url}`
+              `No valid streams found in response from ${instance.url}`
             );
           }
         } catch (error) {
@@ -226,7 +223,6 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       }
 
       console.log(`Found ${streams.length} total streams`);
-
       if (streams.length > 0) {
         console.log('Returning streams:', JSON.stringify(streams, null, 2));
         return res.json({ streams });
