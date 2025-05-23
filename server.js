@@ -138,87 +138,68 @@ app.get('/stream/:type/:id.json', async (req, res) => {
     console.log('YouTube videoId found:', videoId);
 
     if (!videoId) {
+      console.log('No video ID found, returning empty streams');
       return res.json({ streams: [] });
     }
 
-    // Get direct video URLs from Piped API
     try {
-      console.log('Fetching streams from video providers...');
+      console.log(`Fetching streams for video ID: ${videoId}`);
 
       // Try multiple instances
       const instances = [
-        // Piped instances
-        'https://pipedapi.syncpundit.io',
-        'https://api-piped.mha.fi',
-        'https://piped-api.garudalinux.org',
-        // Invidious instances
-        'https://invidious.snopyta.org',
-        'https://yt.artemislena.eu',
-        'https://invidious.flokinet.to',
-        'https://invidious.privacydev.net',
+        {
+          url: 'https://invidious.snopyta.org',
+          type: 'invidious',
+        },
+        {
+          url: 'https://inv.vern.cc',
+          type: 'invidious',
+        },
+        {
+          url: 'https://invidious.flokinet.to',
+          type: 'invidious',
+        },
+        {
+          url: 'https://invidious.privacydev.net',
+          type: 'invidious',
+        },
       ];
-
-      const responses = await Promise.allSettled(
-        instances.map(async (instance) => {
-          try {
-            // Different URL format for Invidious
-            const isInvidious =
-              instance.includes('invidious') ||
-              instance.includes('yt.artemislena');
-            const url = isInvidious
-              ? `${instance}/api/v1/videos/${videoId}`
-              : `${instance}/streams/${videoId}`;
-
-            const response = await axios.get(url, {
-              timeout: 5000,
-              validateStatus: (status) => status === 200,
-            });
-
-            return { instance, isInvidious, data: response.data };
-          } catch (error) {
-            console.error(`Error from ${instance}:`, error.message);
-            return null;
-          }
-        })
-      );
-
-      console.log(
-        'Raw responses:',
-        responses.map((r) => ({
-          status: r.status,
-          instance:
-            r.status === 'fulfilled' && r.value ? r.value.instance : null,
-          hasData:
-            r.status === 'fulfilled' && r.value && r.value.data ? 'yes' : 'no',
-        }))
-      );
 
       const streams = [];
 
-      // Process responses
-      for (const response of responses) {
-        if (
-          response.status !== 'fulfilled' ||
-          !response.value ||
-          !response.value.data
-        )
-          continue;
-
-        const { instance, isInvidious, data } = response.value;
-
+      for (const instance of instances) {
         try {
-          if (isInvidious) {
-            // Handle Invidious response format
-            const formats = data.formatStreams || [];
-            const hd = formats.find(
-              (f) => f.quality === '720p' || f.quality === '480p'
+          console.log(`Trying ${instance.type} instance: ${instance.url}`);
+
+          const url = `${instance.url}/api/v1/videos/${videoId}`;
+          console.log(`Requesting URL: ${url}`);
+
+          const response = await axios.get(url, {
+            timeout: 5000,
+            validateStatus: (status) => status === 200,
+          });
+
+          console.log(`Got response from ${instance.url}`);
+
+          if (response.data && response.data.formatStreams) {
+            console.log(
+              `Found ${response.data.formatStreams.length} format streams`
             );
 
-            if (hd && hd.url) {
+            // Try to find HD or SD quality
+            const format = response.data.formatStreams.find(
+              (f) =>
+                f.quality === '720p' ||
+                f.quality === '480p' ||
+                f.quality === '360p'
+            );
+
+            if (format && format.url) {
+              console.log(`Found stream with quality: ${format.quality}`);
               streams.push({
-                name: `Trailer (${hd.quality})`,
+                name: `Trailer (${format.quality})`,
                 title: 'Official Trailer',
-                url: hd.url,
+                url: format.url,
                 type: 'trailer',
                 source: 'youtube',
                 behaviorHints: {
@@ -226,37 +207,26 @@ app.get('/stream/:type/:id.json', async (req, res) => {
                   bingeGroup: 'trailer',
                 },
               });
+
+              // If we found a good quality stream, we can stop here
+              if (format.quality === '720p') {
+                console.log('Found HD stream, stopping search');
+                break;
+              }
             }
           } else {
-            // Handle Piped response format
-            const videoStreams = data.videoStreams || [];
-            const hd = videoStreams.find(
-              (s) => s.quality === '720p' || s.quality === '480p'
+            console.log(
+              `No format streams found in response from ${instance.url}`
             );
-
-            if (hd && hd.url) {
-              streams.push({
-                name: `Trailer (${hd.quality})`,
-                title: 'Official Trailer',
-                url: hd.url,
-                type: 'trailer',
-                source: 'youtube',
-                behaviorHints: {
-                  notWebReady: true,
-                  bingeGroup: 'trailer',
-                },
-              });
-            }
           }
         } catch (error) {
-          console.error(
-            `Error processing response from ${instance}:`,
-            error.message
-          );
+          console.error(`Error from ${instance.url}:`, error.message);
+          continue;
         }
       }
 
-      console.log('Final streams count:', streams.length);
+      console.log(`Found ${streams.length} total streams`);
+
       if (streams.length > 0) {
         console.log('Returning streams:', JSON.stringify(streams, null, 2));
         return res.json({ streams });
