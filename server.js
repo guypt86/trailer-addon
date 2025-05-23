@@ -110,9 +110,11 @@ app.get('/stream/:type/:id.json', async (req, res) => {
     const { type, id } = req.params;
     console.log(`Received stream request for ${type} with ID: ${id}`);
 
-    // Support both movies and series
-    if (type !== 'movie' && type !== 'series') {
-      return res.status(400).json({ error: 'Invalid request' });
+    // Only support movies
+    if (type !== 'movie') {
+      return res
+        .status(400)
+        .json({ error: 'Only movie trailers are supported' });
     }
 
     let tmdbId = null;
@@ -139,42 +141,28 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Try multiple proxy services for better reliability
+    // Initialize streams with API endpoints
     const streams = [
       {
         name: 'Trailer (HD)',
-        title: 'Trailer HD',
-        url: `https://pipedapi.kavin.rocks/streams/${videoId}`,
+        title: 'Official Trailer',
+        url: null,
         type: 'trailer',
         source: 'youtube',
         behaviorHints: {
           notWebReady: true,
           bingeGroup: 'trailer',
-          ios_supports: true,
         },
       },
       {
         name: 'Trailer (Alternative)',
-        title: 'Trailer',
-        url: `https://api.piped.projectsegfau.lt/streams/${videoId}`,
+        title: 'Official Trailer',
+        url: null,
         type: 'trailer',
         source: 'youtube',
         behaviorHints: {
           notWebReady: true,
           bingeGroup: 'trailer',
-          ios_supports: true,
-        },
-      },
-      {
-        name: 'Trailer (Backup)',
-        title: 'Trailer',
-        url: `https://watchapi.whatever.social/streams/${videoId}`,
-        type: 'trailer',
-        source: 'youtube',
-        behaviorHints: {
-          notWebReady: true,
-          bingeGroup: 'trailer',
-          ios_supports: true,
         },
       },
     ];
@@ -184,7 +172,6 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       const responses = await Promise.allSettled([
         axios.get(`https://pipedapi.kavin.rocks/streams/${videoId}`),
         axios.get(`https://api.piped.projectsegfau.lt/streams/${videoId}`),
-        axios.get(`https://watchapi.whatever.social/streams/${videoId}`),
       ]);
 
       const validResponses = responses
@@ -199,11 +186,17 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       if (validResponses.length > 0) {
         // Update stream URLs with direct video links
         validResponses.forEach((response, index) => {
-          const hd = response.videoStreams.find(
-            (s) => s.quality === '720p' || s.quality === '1080p'
+          if (index >= streams.length) return;
+
+          const hd = response.videoStreams.find((s) => s.quality === '720p');
+          const fallback = response.videoStreams.find(
+            (s) => s.quality === '480p'
           );
+
           if (hd && hd.url) {
             streams[index].url = hd.url;
+          } else if (fallback && fallback.url) {
+            streams[index].url = fallback.url;
           }
         });
       }
@@ -211,8 +204,11 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       console.error('Failed to get direct video URLs:', error.message);
     }
 
-    console.log('Returning streams:', JSON.stringify(streams, null, 2));
-    res.json({ streams });
+    // Filter out streams without URLs
+    const validStreams = streams.filter((s) => s.url);
+
+    console.log('Returning streams:', JSON.stringify(validStreams, null, 2));
+    res.json({ streams: validStreams });
   } catch (error) {
     console.error('Detailed error (stream):', {
       message: error.message,
