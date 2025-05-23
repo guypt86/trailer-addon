@@ -16,7 +16,9 @@
   "background": "https://i.imgur.com/1QgrNNw.png",
   "contactEmail": "example@example.com",
   "behaviorHints": {
-    "configurable": false,
-    "configurationRequired": false
-  }
+    "adult": false,
+    "p2p": false,
+    "configurable": false
+  },
+  "trailerStreams": true
 }

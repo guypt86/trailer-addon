@@ -148,13 +148,10 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       {
         name: 'Trailer',
         title: 'Trailer',
-        type: 'Trailer',
+        url: `https://www.youtube.com/watch?v=${videoId}`,
         ytId: videoId,
-        source: 'YouTube',
-        behaviorHints: {
-          bingeGroup: `trailer-${videoId}`,
-          notWebReady: false,
-        },
+        source: 'youtube',
+        type: 'trailer',
       },
     ];
 
