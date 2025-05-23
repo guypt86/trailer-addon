@@ -144,18 +144,36 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Get direct stream URLs from Piped
+    // Create a basic stream that should work in most cases
+    const streams = [
+      {
+        name: 'Trailer',
+        title: 'Trailer',
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        ytId: videoId,
+        type: 'trailer',
+        source: 'youtube',
+        behaviorHints: {
+          notWebReady: false,
+          ios_supports: true,
+        },
+      },
+    ];
+
+    // Try to get better quality streams from Piped, but don't wait too long
     try {
       const pipedResponse = await axios.get(
-        `https://pipedapi.kavin.rocks/streams/${videoId}`
+        `https://pipedapi.kavin.rocks/streams/${videoId}`,
+        {
+          timeout: 3000, // 3 second timeout
+        }
       );
+
       const { hls, videoStreams = [] } = pipedResponse.data;
 
-      const streams = [];
-
-      // Add HLS stream first (best for iOS)
+      // Add HLS stream if available (best for iOS)
       if (hls) {
-        streams.push({
+        streams.unshift({
           name: 'Trailer (Adaptive)',
           title: 'Trailer HLS',
           url: hls,
@@ -163,30 +181,26 @@ app.get('/stream/:type/:id.json', async (req, res) => {
           source: 'youtube',
           behaviorHints: {
             notWebReady: false,
-            bingeGroup: `trailer-${videoId}`,
             ios_supports: true,
           },
         });
       }
 
-      // Filter and sort streams by quality
-      const sortedStreams = videoStreams
+      // Add direct MP4 streams
+      const mp4Streams = videoStreams
         .filter(
           (stream) =>
-            // Only include iOS-compatible formats
             (stream.format === 'MPEG_4' || stream.format === 'MP4') &&
-            // Include streams with quality info
             stream.quality &&
-            // Ensure URL is HTTPS (required for iOS)
             stream.url.startsWith('https://')
         )
         .sort((a, b) => {
           const getQualityNumber = (q) => parseInt(q.replace('p', '')) || 0;
           return getQualityNumber(b.quality) - getQualityNumber(a.quality);
-        });
+        })
+        .slice(0, 3); // Only take top 3 qualities to avoid overwhelming
 
-      // Add direct MP4 streams
-      sortedStreams.forEach((stream) => {
+      mp4Streams.forEach((stream) => {
         streams.push({
           name: `Trailer (${stream.quality})`,
           title: `Trailer ${stream.quality}`,
@@ -195,47 +209,17 @@ app.get('/stream/:type/:id.json', async (req, res) => {
           source: 'youtube',
           behaviorHints: {
             notWebReady: false,
-            bingeGroup: `trailer-${videoId}`,
             ios_supports: true,
           },
         });
       });
-
-      if (streams.length === 0) {
-        // Fallback to Piped web player URL
-        streams.push({
-          name: 'Trailer (Web)',
-          title: 'Trailer',
-          url: `https://piped.kavin.rocks/watch?v=${videoId}`,
-          type: 'trailer',
-          source: 'youtube',
-          behaviorHints: {
-            notWebReady: false,
-            ios_supports: true,
-          },
-        });
-      }
-
-      console.log('Returning streams:', JSON.stringify(streams, null, 2));
-      res.json({ streams });
     } catch (error) {
-      console.error('Failed to get direct streams:', error.message);
-      // Fallback to basic stream
-      const streams = [
-        {
-          name: 'Trailer',
-          title: 'Trailer',
-          url: `https://piped.kavin.rocks/watch?v=${videoId}`,
-          type: 'trailer',
-          source: 'youtube',
-          behaviorHints: {
-            notWebReady: false,
-            ios_supports: true,
-          },
-        },
-      ];
-      res.json({ streams });
+      console.error('Failed to get Piped streams:', error.message);
+      // Continue with basic stream
     }
+
+    console.log('Returning streams:', JSON.stringify(streams, null, 2));
+    res.json({ streams });
   } catch (error) {
     console.error('Detailed error (stream):', {
       message: error.message,
