@@ -136,6 +136,37 @@ async function getMovieNameFromTmdb(tmdbId) {
   }
 }
 
+// Helper: get trailer from Vimeo
+async function getVimeoTrailer(movieName) {
+  try {
+    const url = `https://api.vimeo.com/videos?query=${encodeURIComponent(
+      movieName
+    )}&filter=trailer`;
+    const response = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${process.env.VIMEO_API_KEY}`,
+      },
+    });
+    const videos = response.data.data;
+    if (videos && videos.length > 0) {
+      return videos[0].link; // קישור ישיר לוידאו
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to get Vimeo trailer:', error);
+    return null;
+  }
+}
+
+// Helper: normalize movie name for Apple Trailers
+function normalizeMovieName(movieName) {
+  return movieName
+    .replace(/[^\w\s]/g, '') // הסרת תווים מיוחדים
+    .replace(/\s+/g, ' ') // הסרת רווחים כפולים
+    .trim()
+    .toLowerCase();
+}
+
 // Stream endpoint for trailer
 app.get('/stream/:type/:id.json', async (req, res) => {
   try {
@@ -172,8 +203,9 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Get trailer from Apple Trailers
-    const appleUrl = await getAppleTrailer(movieName);
+    // Try Apple Trailers with normalized name
+    const normalizedName = normalizeMovieName(movieName);
+    const appleUrl = await getAppleTrailer(normalizedName);
     if (appleUrl) {
       const streams = [
         {
@@ -192,10 +224,32 @@ app.get('/stream/:type/:id.json', async (req, res) => {
         JSON.stringify(streams, null, 2)
       );
       return res.json({ streams });
-    } else {
-      console.log('No Apple trailer found');
-      return res.json({ streams: [] });
     }
+
+    // Fallback to Vimeo
+    const vimeoUrl = await getVimeoTrailer(movieName);
+    if (vimeoUrl) {
+      const streams = [
+        {
+          name: 'Trailer (Vimeo)',
+          title: 'Official Trailer',
+          url: vimeoUrl,
+          type: 'trailer',
+          source: 'vimeo',
+          behaviorHints: {
+            bingeGroup: 'trailer',
+          },
+        },
+      ];
+      console.log(
+        'Returning Vimeo trailer stream:',
+        JSON.stringify(streams, null, 2)
+      );
+      return res.json({ streams });
+    }
+
+    console.log('No trailer found from Apple or Vimeo');
+    return res.json({ streams: [] });
   } catch (error) {
     console.error('Detailed error (stream):', {
       message: error.message,
