@@ -144,7 +144,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       {
         name: 'Trailer (HD)',
         title: 'Trailer HD',
-        url: `https://yt.funami.tech/watch?v=${videoId}`,
+        url: `https://yt.funami.tech/latest_version?id=${videoId}&itag=22&local=true`,
         type: 'trailer',
         source: 'youtube',
         behaviorHints: {
@@ -156,7 +156,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       {
         name: 'Trailer (Alternative)',
         title: 'Trailer',
-        url: `https://invidious.slipfox.xyz/watch?v=${videoId}`,
+        url: `https://invidious.slipfox.xyz/latest_version?id=${videoId}&itag=22&local=true`,
         type: 'trailer',
         source: 'youtube',
         behaviorHints: {
@@ -168,7 +168,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       {
         name: 'Trailer (Backup)',
         title: 'Trailer',
-        url: `https://inv.vern.cc/watch?v=${videoId}`,
+        url: `https://invidious.flokinet.to/latest_version?id=${videoId}&itag=22&local=true`,
         type: 'trailer',
         source: 'youtube',
         behaviorHints: {
