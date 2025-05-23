@@ -216,6 +216,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
         ytId: videoId,
       },
     ];
+    console.log('Returning streams:', JSON.stringify(streams, null, 2));
     res.json({ streams });
   } catch (error) {
     console.error('Detailed error (stream):', {

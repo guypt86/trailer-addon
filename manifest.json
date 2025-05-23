@@ -4,14 +4,14 @@
   "name": "Movie Trailers",
   "description": "Adds movie trailers from YouTube to Stremio",
   "logo": "https://i.imgur.com/1QgrNNw.png",
-  "resources": ["meta", "stream"],
-  "types": ["movie", "series"],
+  "resources": ["stream"],
+  "types": ["movie"],
   "catalogs": [],
-  "idPrefixes": ["tt"],
+  "idPrefixes": ["tt", "tmdb:"],
   "background": "https://i.imgur.com/1QgrNNw.png",
   "contactEmail": "example@example.com",
   "behaviorHints": {
-    "bingeWatch": false,
-    "autoStash": false
+    "configurable": false,
+    "configurationRequired": false
   }
 }
