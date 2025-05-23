@@ -144,36 +144,98 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    const streams = [
-      {
-        name: 'Trailer (YouTube)',
-        title: 'YouTube Trailer',
-        ytId: videoId,
-        source: 'youtube',
-        type: 'trailer',
-      },
-      {
-        name: 'Trailer (Direct)',
-        title: 'Direct Stream',
-        url: `https://www.youtube.com/embed/${videoId}`,
-        source: 'youtube',
-        type: 'trailer',
-        behaviorHints: {
-          notWebReady: false,
-          bingeGroup: `trailer-${videoId}`,
-        },
-      },
-      {
-        name: 'Trailer (Invidious)',
-        title: 'Alternative Player',
-        url: `https://invidious.snopyta.org/watch?v=${videoId}`,
-        source: 'youtube',
-        type: 'trailer',
-      },
-    ];
+    // Get direct stream URLs from Piped
+    try {
+      const pipedResponse = await axios.get(
+        `https://pipedapi.kavin.rocks/streams/${videoId}`
+      );
+      const { hls, videoStreams = [] } = pipedResponse.data;
 
-    console.log('Returning streams:', JSON.stringify(streams, null, 2));
-    res.json({ streams });
+      const streams = [];
+
+      // Add HLS stream first (best for iOS)
+      if (hls) {
+        streams.push({
+          name: 'Trailer (Adaptive)',
+          title: 'Trailer HLS',
+          url: hls,
+          type: 'trailer',
+          source: 'youtube',
+          behaviorHints: {
+            notWebReady: false,
+            bingeGroup: `trailer-${videoId}`,
+            ios_supports: true,
+          },
+        });
+      }
+
+      // Filter and sort streams by quality
+      const sortedStreams = videoStreams
+        .filter(
+          (stream) =>
+            // Only include iOS-compatible formats
+            (stream.format === 'MPEG_4' || stream.format === 'MP4') &&
+            // Include streams with quality info
+            stream.quality &&
+            // Ensure URL is HTTPS (required for iOS)
+            stream.url.startsWith('https://')
+        )
+        .sort((a, b) => {
+          const getQualityNumber = (q) => parseInt(q.replace('p', '')) || 0;
+          return getQualityNumber(b.quality) - getQualityNumber(a.quality);
+        });
+
+      // Add direct MP4 streams
+      sortedStreams.forEach((stream) => {
+        streams.push({
+          name: `Trailer (${stream.quality})`,
+          title: `Trailer ${stream.quality}`,
+          url: stream.url,
+          type: 'trailer',
+          source: 'youtube',
+          behaviorHints: {
+            notWebReady: false,
+            bingeGroup: `trailer-${videoId}`,
+            ios_supports: true,
+          },
+        });
+      });
+
+      if (streams.length === 0) {
+        // Fallback to Piped web player URL
+        streams.push({
+          name: 'Trailer (Web)',
+          title: 'Trailer',
+          url: `https://piped.kavin.rocks/watch?v=${videoId}`,
+          type: 'trailer',
+          source: 'youtube',
+          behaviorHints: {
+            notWebReady: false,
+            ios_supports: true,
+          },
+        });
+      }
+
+      console.log('Returning streams:', JSON.stringify(streams, null, 2));
+      res.json({ streams });
+    } catch (error) {
+      console.error('Failed to get direct streams:', error.message);
+      // Fallback to basic stream
+      const streams = [
+        {
+          name: 'Trailer',
+          title: 'Trailer',
+          url: `https://piped.kavin.rocks/watch?v=${videoId}`,
+          type: 'trailer',
+          source: 'youtube',
+          behaviorHints: {
+            notWebReady: false,
+            ios_supports: true,
+          },
+        },
+      ];
+      res.json({ streams });
+    }
   } catch (error) {
     console.error('Detailed error (stream):', {
       message: error.message,
