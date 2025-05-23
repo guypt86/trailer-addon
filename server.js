@@ -144,7 +144,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       {
         name: 'Trailer (HD)',
         title: 'Trailer HD',
-        url: `https://yt.funami.tech/latest_version?id=${videoId}&itag=22&local=true`,
+        url: `https://pipedapi.kavin.rocks/streams/${videoId}`,
         type: 'trailer',
         source: 'youtube',
         behaviorHints: {
@@ -156,7 +156,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       {
         name: 'Trailer (Alternative)',
         title: 'Trailer',
-        url: `https://invidious.slipfox.xyz/latest_version?id=${videoId}&itag=22&local=true`,
+        url: `https://api.piped.projectsegfau.lt/streams/${videoId}`,
         type: 'trailer',
         source: 'youtube',
         behaviorHints: {
@@ -168,7 +168,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       {
         name: 'Trailer (Backup)',
         title: 'Trailer',
-        url: `https://invidious.flokinet.to/latest_version?id=${videoId}&itag=22&local=true`,
+        url: `https://watchapi.whatever.social/streams/${videoId}`,
         type: 'trailer',
         source: 'youtube',
         behaviorHints: {
@@ -178,6 +178,38 @@ app.get('/stream/:type/:id.json', async (req, res) => {
         },
       },
     ];
+
+    // Get direct video URLs from Piped API
+    try {
+      const responses = await Promise.allSettled([
+        axios.get(`https://pipedapi.kavin.rocks/streams/${videoId}`),
+        axios.get(`https://api.piped.projectsegfau.lt/streams/${videoId}`),
+        axios.get(`https://watchapi.whatever.social/streams/${videoId}`),
+      ]);
+
+      const validResponses = responses
+        .filter(
+          (r) =>
+            r.status === 'fulfilled' &&
+            r.value.data &&
+            r.value.data.videoStreams
+        )
+        .map((r) => r.value.data);
+
+      if (validResponses.length > 0) {
+        // Update stream URLs with direct video links
+        validResponses.forEach((response, index) => {
+          const hd = response.videoStreams.find(
+            (s) => s.quality === '720p' || s.quality === '1080p'
+          );
+          if (hd && hd.url) {
+            streams[index].url = hd.url;
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to get direct video URLs:', error.message);
+    }
 
     console.log('Returning streams:', JSON.stringify(streams, null, 2));
     res.json({ streams });
