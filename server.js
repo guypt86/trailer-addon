@@ -143,88 +143,129 @@ app.get('/stream/:type/:id.json', async (req, res) => {
 
     // Get direct video URLs from Piped API
     try {
-      console.log('Fetching streams from Piped APIs...');
-      const pipedInstances = [
-        'https://pipedapi.kavin.rocks',
-        'https://pipedapi-libre.kavin.rocks',
-        'https://api.piped.projectsegfau.lt',
-        'https://watchapi.whatever.social',
+      console.log('Fetching streams from video providers...');
+
+      // Try multiple instances
+      const instances = [
+        // Piped instances
+        'https://pipedapi.syncpundit.io',
+        'https://api-piped.mha.fi',
+        'https://piped-api.garudalinux.org',
+        // Invidious instances
+        'https://invidious.snopyta.org',
+        'https://yt.artemislena.eu',
+        'https://invidious.flokinet.to',
+        'https://invidious.privacydev.net',
       ];
 
       const responses = await Promise.allSettled(
-        pipedInstances.map((instance) =>
-          axios.get(`${instance}/streams/${videoId}`).catch((error) => {
+        instances.map(async (instance) => {
+          try {
+            // Different URL format for Invidious
+            const isInvidious =
+              instance.includes('invidious') ||
+              instance.includes('yt.artemislena');
+            const url = isInvidious
+              ? `${instance}/api/v1/videos/${videoId}`
+              : `${instance}/streams/${videoId}`;
+
+            const response = await axios.get(url, {
+              timeout: 5000,
+              validateStatus: (status) => status === 200,
+            });
+
+            return { instance, isInvidious, data: response.data };
+          } catch (error) {
             console.error(`Error from ${instance}:`, error.message);
             return null;
-          })
-        )
+          }
+        })
       );
 
       console.log(
         'Raw responses:',
         responses.map((r) => ({
           status: r.status,
+          instance:
+            r.status === 'fulfilled' && r.value ? r.value.instance : null,
           hasData:
             r.status === 'fulfilled' && r.value && r.value.data ? 'yes' : 'no',
-          streams:
-            r.status === 'fulfilled' && r.value && r.value.data
-              ? r.value.data.videoStreams?.length
-              : 0,
         }))
       );
 
-      const validResponses = responses
-        .filter(
-          (r) =>
-            r.status === 'fulfilled' &&
-            r.value &&
-            r.value.data &&
-            r.value.data.videoStreams
+      const streams = [];
+
+      // Process responses
+      for (const response of responses) {
+        if (
+          response.status !== 'fulfilled' ||
+          !response.value ||
+          !response.value.data
         )
-        .map((r) => r.value.data);
+          continue;
 
-      console.log('Valid responses count:', validResponses.length);
+        const { instance, isInvidious, data } = response.value;
 
-      if (validResponses.length > 0) {
-        // Initialize streams array
-        const streams = validResponses
-          .map((response, index) => {
-            const hd = response.videoStreams.find((s) => s.quality === '720p');
-            const fallback = response.videoStreams.find(
-              (s) => s.quality === '480p' || s.quality === '360p'
+        try {
+          if (isInvidious) {
+            // Handle Invidious response format
+            const formats = data.formatStreams || [];
+            const hd = formats.find(
+              (f) => f.quality === '720p' || f.quality === '480p'
             );
 
-            const streamUrl = (hd || fallback)?.url;
-            console.log(
-              `Stream ${index + 1} URL:`,
-              streamUrl ? 'Found' : 'Not found'
+            if (hd && hd.url) {
+              streams.push({
+                name: `Trailer (${hd.quality})`,
+                title: 'Official Trailer',
+                url: hd.url,
+                type: 'trailer',
+                source: 'youtube',
+                behaviorHints: {
+                  notWebReady: true,
+                  bingeGroup: 'trailer',
+                },
+              });
+            }
+          } else {
+            // Handle Piped response format
+            const videoStreams = data.videoStreams || [];
+            const hd = videoStreams.find(
+              (s) => s.quality === '720p' || s.quality === '480p'
             );
 
-            if (!streamUrl) return null;
+            if (hd && hd.url) {
+              streams.push({
+                name: `Trailer (${hd.quality})`,
+                title: 'Official Trailer',
+                url: hd.url,
+                type: 'trailer',
+                source: 'youtube',
+                behaviorHints: {
+                  notWebReady: true,
+                  bingeGroup: 'trailer',
+                },
+              });
+            }
+          }
+        } catch (error) {
+          console.error(
+            `Error processing response from ${instance}:`,
+            error.message
+          );
+        }
+      }
 
-            return {
-              name: `Trailer ${index + 1}`,
-              title: 'Official Trailer',
-              url: streamUrl,
-              type: 'trailer',
-              source: 'youtube',
-              behaviorHints: {
-                notWebReady: true,
-                bingeGroup: 'trailer',
-              },
-            };
-          })
-          .filter(Boolean);
-
-        console.log('Final streams count:', streams.length);
+      console.log('Final streams count:', streams.length);
+      if (streams.length > 0) {
         console.log('Returning streams:', JSON.stringify(streams, null, 2));
         return res.json({ streams });
       } else {
-        console.log('No valid streams found from any Piped instance');
+        console.log('No valid streams found from any instance');
         return res.json({ streams: [] });
       }
     } catch (error) {
-      console.error('Failed to get direct video URLs:', error.message);
+      console.error('Failed to get video streams:', error.message);
       return res.json({ streams: [] });
     }
   } catch (error) {
