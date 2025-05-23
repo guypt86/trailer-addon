@@ -116,6 +116,61 @@ app.get('/meta/:type/:id.json', async (req, res) => {
   }
 });
 
+// Stream endpoint for trailer
+app.get('/stream/:type/:id.json', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    console.log(`Received stream request for ${type} with ID: ${id}`);
+
+    if (!process.env.YOUTUBE_API_KEY) {
+      console.error('YouTube API key is not set');
+      return res
+        .status(500)
+        .json({ error: 'YouTube API key is not configured' });
+    }
+
+    if (type !== 'movie' || !id.startsWith('tt')) {
+      return res.status(400).json({ error: 'Invalid request' });
+    }
+
+    // Search for trailer on YouTube
+    const searchResponse = await youtube.search.list({
+      part: 'snippet',
+      q: `${id} official trailer`,
+      type: 'video',
+      maxResults: 1,
+      key: process.env.YOUTUBE_API_KEY,
+    });
+
+    const videoId = searchResponse.data.items[0]?.id.videoId;
+
+    if (!videoId) {
+      return res.json({ streams: [] });
+    }
+
+    // Return the trailer as a stream
+    const streams = [
+      {
+        title: 'Trailer',
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        name: 'YouTube',
+        externalUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      },
+    ];
+    res.json({ streams });
+  } catch (error) {
+    console.error('Detailed error (stream):', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
+    });
+    res.status(500).json({
+      error: 'Internal server error',
+      details: error.message,
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
