@@ -163,18 +163,34 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Get direct video URL
-    const directUrl = await getDirectVideoUrl(videoId);
-
-    if (!directUrl) {
-      return res.json({ streams: [] });
-    }
-
+    // Try multiple proxy services for better reliability
     const streams = [
       {
-        name: 'Trailer (720p)',
+        name: 'Trailer (HD)',
+        title: 'Trailer HD',
+        url: `https://pipedapi-libre.kavin.rocks/streams/${videoId}`,
+        type: 'trailer',
+        source: 'youtube',
+        behaviorHints: {
+          notWebReady: false,
+          ios_supports: true,
+        },
+      },
+      {
+        name: 'Trailer (Alternative)',
         title: 'Trailer',
-        url: directUrl,
+        url: `https://invidious.slipfox.xyz/latest_version?id=${videoId}&itag=22`,
+        type: 'trailer',
+        source: 'youtube',
+        behaviorHints: {
+          notWebReady: false,
+          ios_supports: true,
+        },
+      },
+      {
+        name: 'Trailer (Backup)',
+        title: 'Trailer',
+        url: `https://ytprivate.com/watch?v=${videoId}`,
         type: 'trailer',
         source: 'youtube',
         behaviorHints: {
