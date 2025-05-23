@@ -149,7 +149,18 @@ async function getVimeoTrailer(movieName) {
     });
     const videos = response.data.data;
     if (videos && videos.length > 0) {
-      return videos[0].link; // קישור ישיר לוידאו
+      const video = videos[0];
+      // Try to get direct mp4 file
+      if (video.files && video.files.length > 0) {
+        const mp4 = video.files.find((f) => f.type === 'video/mp4');
+        if (mp4 && mp4.link) return mp4.link;
+      }
+      // Try to get HLS (m3u8) link
+      if (video.play && video.play.hls && video.play.hls.link) {
+        return video.play.hls.link;
+      }
+      // Fallback: regular Vimeo page link (not supported by Infuse)
+      return video.link;
     }
     return null;
   } catch (error) {
