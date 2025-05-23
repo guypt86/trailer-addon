@@ -204,11 +204,11 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Return the trailer as a stream with only externalUrl
+    // Return the trailer as a stream with only the url field
     const streams = [
       {
         title: 'Trailer',
-        externalUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
       },
     ];
     res.json({ streams });
