@@ -5,7 +5,7 @@
   "description": "Adds movie trailers from YouTube to Stremio",
   "logo": "https://i.imgur.com/1QgrNNw.png",
   "resources": ["meta", "stream"],
-  "types": ["movie"],
+  "types": ["movie", "series"],
   "catalogs": [],
   "idPrefixes": ["tt"],
   "background": "https://i.imgur.com/1QgrNNw.png",

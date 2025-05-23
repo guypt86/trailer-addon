@@ -157,6 +157,11 @@ app.get('/stream/:type/:id.json', async (req, res) => {
         .json({ error: 'YouTube API key is not configured' });
     }
 
+    // Support both movies and series
+    if (type !== 'movie' && type !== 'series') {
+      return res.status(400).json({ error: 'Invalid request' });
+    }
+
     let imdbId = null;
     let searchQuery = null;
 
@@ -204,10 +209,11 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Return the trailer as a stream with only externalUrl for browser opening
+    // Return the trailer with both url and externalUrl
     const streams = [
       {
-        title: 'Trailer (opens in browser)',
+        title: 'Trailer (may not play, try external app)',
+        url: `https://www.youtube.com/watch?v=${videoId}`,
         externalUrl: `https://www.youtube.com/watch?v=${videoId}`,
       },
     ];
