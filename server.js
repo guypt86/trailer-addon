@@ -144,82 +144,79 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Create a basic stream that should work in most cases
-    const streams = [
-      {
-        name: 'Trailer',
-        title: 'Trailer',
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-        ytId: videoId,
+    // Try to get direct streams from Invidious
+    try {
+      const invidiousResponse = await axios.get(
+        `https://inv.vern.cc/api/v1/videos/${videoId}`,
+        {
+          timeout: 5000,
+        }
+      );
+
+      const { formatStreams = [] } = invidiousResponse.data;
+
+      // Filter and sort streams
+      const mp4Streams = formatStreams
+        .filter(
+          (stream) =>
+            stream.container === 'mp4' &&
+            stream.url.startsWith('https://') &&
+            !stream.url.includes('googlevideo.com') // These URLs expire quickly
+        )
+        .sort((a, b) => parseInt(b.quality) - parseInt(a.quality))
+        .slice(0, 3); // Only take top 3 qualities
+
+      if (mp4Streams.length === 0) {
+        // If no direct streams, try alternative Invidious instance
+        return res.json({
+          streams: [
+            {
+              name: 'Trailer',
+              title: 'Trailer',
+              url: `https://vid.puffyan.us/latest_version?id=${videoId}&itag=22`,
+              type: 'trailer',
+              source: 'youtube',
+              behaviorHints: {
+                notWebReady: false,
+                ios_supports: true,
+              },
+            },
+          ],
+        });
+      }
+
+      const streams = mp4Streams.map((stream) => ({
+        name: `Trailer (${stream.quality}p)`,
+        title: `Trailer ${stream.quality}p`,
+        url: stream.url,
         type: 'trailer',
         source: 'youtube',
         behaviorHints: {
           notWebReady: false,
           ios_supports: true,
         },
-      },
-    ];
+      }));
 
-    // Try to get better quality streams from Piped, but don't wait too long
-    try {
-      const pipedResponse = await axios.get(
-        `https://pipedapi.kavin.rocks/streams/${videoId}`,
-        {
-          timeout: 3000, // 3 second timeout
-        }
-      );
-
-      const { hls, videoStreams = [] } = pipedResponse.data;
-
-      // Add HLS stream if available (best for iOS)
-      if (hls) {
-        streams.unshift({
-          name: 'Trailer (Adaptive)',
-          title: 'Trailer HLS',
-          url: hls,
-          type: 'trailer',
-          source: 'youtube',
-          behaviorHints: {
-            notWebReady: false,
-            ios_supports: true,
-          },
-        });
-      }
-
-      // Add direct MP4 streams
-      const mp4Streams = videoStreams
-        .filter(
-          (stream) =>
-            (stream.format === 'MPEG_4' || stream.format === 'MP4') &&
-            stream.quality &&
-            stream.url.startsWith('https://')
-        )
-        .sort((a, b) => {
-          const getQualityNumber = (q) => parseInt(q.replace('p', '')) || 0;
-          return getQualityNumber(b.quality) - getQualityNumber(a.quality);
-        })
-        .slice(0, 3); // Only take top 3 qualities to avoid overwhelming
-
-      mp4Streams.forEach((stream) => {
-        streams.push({
-          name: `Trailer (${stream.quality})`,
-          title: `Trailer ${stream.quality}`,
-          url: stream.url,
-          type: 'trailer',
-          source: 'youtube',
-          behaviorHints: {
-            notWebReady: false,
-            ios_supports: true,
-          },
-        });
-      });
+      console.log('Returning streams:', JSON.stringify(streams, null, 2));
+      res.json({ streams });
     } catch (error) {
-      console.error('Failed to get Piped streams:', error.message);
-      // Continue with basic stream
+      console.error('Failed to get Invidious streams:', error.message);
+      // Fallback to alternative Invidious instance
+      const streams = [
+        {
+          name: 'Trailer',
+          title: 'Trailer',
+          url: `https://vid.puffyan.us/latest_version?id=${videoId}&itag=22`,
+          type: 'trailer',
+          source: 'youtube',
+          behaviorHints: {
+            notWebReady: false,
+            ios_supports: true,
+          },
+        },
+      ];
+      res.json({ streams });
     }
-
-    console.log('Returning streams:', JSON.stringify(streams, null, 2));
-    res.json({ streams });
   } catch (error) {
     console.error('Detailed error (stream):', {
       message: error.message,
