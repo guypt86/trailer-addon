@@ -141,74 +141,92 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Initialize streams with API endpoints
-    const streams = [
-      {
-        name: 'Trailer (HD)',
-        title: 'Official Trailer',
-        url: null,
-        type: 'trailer',
-        source: 'youtube',
-        behaviorHints: {
-          notWebReady: true,
-          bingeGroup: 'trailer',
-        },
-      },
-      {
-        name: 'Trailer (Alternative)',
-        title: 'Official Trailer',
-        url: null,
-        type: 'trailer',
-        source: 'youtube',
-        behaviorHints: {
-          notWebReady: true,
-          bingeGroup: 'trailer',
-        },
-      },
-    ];
-
     // Get direct video URLs from Piped API
     try {
-      const responses = await Promise.allSettled([
-        axios.get(`https://pipedapi.kavin.rocks/streams/${videoId}`),
-        axios.get(`https://api.piped.projectsegfau.lt/streams/${videoId}`),
-      ]);
+      console.log('Fetching streams from Piped APIs...');
+      const pipedInstances = [
+        'https://pipedapi.kavin.rocks',
+        'https://pipedapi-libre.kavin.rocks',
+        'https://api.piped.projectsegfau.lt',
+        'https://watchapi.whatever.social',
+      ];
+
+      const responses = await Promise.allSettled(
+        pipedInstances.map((instance) =>
+          axios.get(`${instance}/streams/${videoId}`).catch((error) => {
+            console.error(`Error from ${instance}:`, error.message);
+            return null;
+          })
+        )
+      );
+
+      console.log(
+        'Raw responses:',
+        responses.map((r) => ({
+          status: r.status,
+          hasData:
+            r.status === 'fulfilled' && r.value && r.value.data ? 'yes' : 'no',
+          streams:
+            r.status === 'fulfilled' && r.value && r.value.data
+              ? r.value.data.videoStreams?.length
+              : 0,
+        }))
+      );
 
       const validResponses = responses
         .filter(
           (r) =>
             r.status === 'fulfilled' &&
+            r.value &&
             r.value.data &&
             r.value.data.videoStreams
         )
         .map((r) => r.value.data);
 
+      console.log('Valid responses count:', validResponses.length);
+
       if (validResponses.length > 0) {
-        // Update stream URLs with direct video links
-        validResponses.forEach((response, index) => {
-          if (index >= streams.length) return;
+        // Initialize streams array
+        const streams = validResponses
+          .map((response, index) => {
+            const hd = response.videoStreams.find((s) => s.quality === '720p');
+            const fallback = response.videoStreams.find(
+              (s) => s.quality === '480p' || s.quality === '360p'
+            );
 
-          const hd = response.videoStreams.find((s) => s.quality === '720p');
-          const fallback = response.videoStreams.find(
-            (s) => s.quality === '480p'
-          );
+            const streamUrl = (hd || fallback)?.url;
+            console.log(
+              `Stream ${index + 1} URL:`,
+              streamUrl ? 'Found' : 'Not found'
+            );
 
-          if (hd && hd.url) {
-            streams[index].url = hd.url;
-          } else if (fallback && fallback.url) {
-            streams[index].url = fallback.url;
-          }
-        });
+            if (!streamUrl) return null;
+
+            return {
+              name: `Trailer ${index + 1}`,
+              title: 'Official Trailer',
+              url: streamUrl,
+              type: 'trailer',
+              source: 'youtube',
+              behaviorHints: {
+                notWebReady: true,
+                bingeGroup: 'trailer',
+              },
+            };
+          })
+          .filter(Boolean);
+
+        console.log('Final streams count:', streams.length);
+        console.log('Returning streams:', JSON.stringify(streams, null, 2));
+        return res.json({ streams });
+      } else {
+        console.log('No valid streams found from any Piped instance');
+        return res.json({ streams: [] });
       }
     } catch (error) {
       console.error('Failed to get direct video URLs:', error.message);
+      return res.json({ streams: [] });
     }
-
-    // Filter out streams without URLs
-    const validStreams = streams.filter((s) => s.url);
-
-    console.log('Returning streams:', JSON.stringify(validStreams, null, 2));
-    res.json({ streams: validStreams });
   } catch (error) {
     console.error('Detailed error (stream):', {
       message: error.message,
