@@ -209,12 +209,19 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Return the trailer with infoHash and externalUrl
+    // Return multiple trailer streams with different approaches
     const streams = [
       {
-        title: 'Trailer (click to open in browser)',
-        infoHash: videoId, // Use videoId as fake hash
+        title: 'Trailer (opens in browser)',
         externalUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      },
+      {
+        title: 'Trailer (may fail in player)',
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+      },
+      {
+        title: 'Trailer (YouTube)',
+        ytId: videoId,
       },
     ];
     res.json({ streams });
