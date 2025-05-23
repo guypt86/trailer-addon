@@ -1,15 +1,11 @@
 require('dotenv').config();
 const express = require('express');
-const { google } = require('googleapis');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 10000;
-
-// YouTube API setup
-const youtube = google.youtube('v3');
 
 // Middleware to parse JSON
 app.use(express.json());
@@ -48,74 +44,6 @@ app.get('/manifest.json', (req, res) => {
   }
 });
 
-// Meta endpoint
-app.get('/meta/:type/:id.json', async (req, res) => {
-  try {
-    const { type, id } = req.params;
-    console.log(`Received request for ${type} with ID: ${id}`);
-
-    if (!process.env.YOUTUBE_API_KEY) {
-      console.error('YouTube API key is not set');
-      return res
-        .status(500)
-        .json({ error: 'YouTube API key is not configured' });
-    }
-
-    if (type !== 'movie' || !id.startsWith('tt')) {
-      return res.status(400).json({ error: 'Invalid request' });
-    }
-
-    console.log('Searching for trailer on YouTube...');
-    // Search for trailer on YouTube
-    const searchResponse = await youtube.search.list({
-      part: 'snippet',
-      q: `${id} official trailer`,
-      type: 'video',
-      maxResults: 1,
-      key: process.env.YOUTUBE_API_KEY,
-    });
-
-    const videoId = searchResponse.data.items[0]?.id.videoId;
-
-    if (!videoId) {
-      console.log('No trailer found');
-      return res.status(404).json({ error: 'Trailer not found' });
-    }
-
-    console.log(`Found video ID: ${videoId}`);
-    // Get video details
-    const videoResponse = await youtube.videos.list({
-      part: 'snippet',
-      id: videoId,
-      key: process.env.YOUTUBE_API_KEY,
-    });
-
-    const video = videoResponse.data.items[0];
-
-    // Construct meta response
-    const meta = {
-      id: id,
-      type: 'movie',
-      name: video.snippet.title,
-      trailer: `https://www.youtube.com/watch?v=${videoId}`,
-      poster: video.snippet.thumbnails.high.url,
-    };
-
-    console.log('Successfully returning meta data');
-    res.json({ meta });
-  } catch (error) {
-    console.error('Detailed error:', {
-      message: error.message,
-      code: error.code,
-      stack: error.stack,
-    });
-    res.status(500).json({
-      error: 'Internal server error',
-      details: error.message,
-    });
-  }
-});
-
 const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
 
 // Helper: get IMDb id from TMDB
@@ -144,18 +72,41 @@ async function getTitleFromTmdb(tmdbId) {
   }
 }
 
+// Helper: get video ID from YouTube search
+async function getYouTubeVideoId(searchQuery) {
+  try {
+    // Encode the search query
+    const encodedQuery = encodeURIComponent(searchQuery);
+
+    // Make a request to YouTube's search page
+    const response = await axios.get(
+      `https://www.youtube.com/results?search_query=${encodedQuery}`,
+      {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        },
+      }
+    );
+
+    // Extract video ID using regex
+    const videoIdMatch = response.data.match(/\{"videoId":"([^"]+)"\}/);
+    if (videoIdMatch && videoIdMatch[1]) {
+      return videoIdMatch[1];
+    }
+
+    return null;
+  } catch (error) {
+    console.error('YouTube search failed:', error.message);
+    return null;
+  }
+}
+
 // Stream endpoint for trailer
 app.get('/stream/:type/:id.json', async (req, res) => {
   try {
     const { type, id } = req.params;
     console.log(`Received stream request for ${type} with ID: ${id}`);
-
-    if (!process.env.YOUTUBE_API_KEY) {
-      console.error('YouTube API key is not set');
-      return res
-        .status(500)
-        .json({ error: 'YouTube API key is not configured' });
-    }
 
     // Support both movies and series
     if (type !== 'movie' && type !== 'series') {
@@ -193,23 +144,13 @@ app.get('/stream/:type/:id.json', async (req, res) => {
     }
 
     console.log('YouTube search query:', searchQuery);
-    // Search for trailer on YouTube
-    const searchResponse = await youtube.search.list({
-      part: 'snippet',
-      q: searchQuery,
-      type: 'video',
-      maxResults: 1,
-      key: process.env.YOUTUBE_API_KEY,
-    });
-
-    const videoId = searchResponse.data.items[0]?.id.videoId;
+    const videoId = await getYouTubeVideoId(searchQuery);
     console.log('YouTube videoId found:', videoId);
 
     if (!videoId) {
       return res.json({ streams: [] });
     }
 
-    // Return multiple trailer streams with different approaches
     const streams = [
       {
         name: 'Trailer',
@@ -223,6 +164,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
         },
       },
     ];
+
     console.log('Returning streams:', JSON.stringify(streams, null, 2));
     res.json({ streams });
   } catch (error) {
@@ -240,22 +182,13 @@ app.get('/stream/:type/:id.json', async (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    youtube_api_key: process.env.YOUTUBE_API_KEY
-      ? 'configured'
-      : 'not configured',
-  });
+  res.json({ status: 'ok' });
 });
 
 // Error handling for server startup
 const server = app
   .listen(port, () => {
     console.log(`Server running on port ${port}`);
-    console.log(
-      'YouTube API Key status:',
-      process.env.YOUTUBE_API_KEY ? 'configured' : 'not configured'
-    );
   })
   .on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
