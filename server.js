@@ -104,6 +104,38 @@ async function getTrailerFromTmdb(tmdbId) {
   }
 }
 
+// Helper: get trailer from Apple Trailers
+async function getAppleTrailer(movieName) {
+  try {
+    const url = `https://trailers.apple.com/api/v1/movies?q=${encodeURIComponent(
+      movieName
+    )}`;
+    const response = await axios.get(url);
+    const movies = response.data.movies;
+    if (movies && movies.length > 0) {
+      const trailer = movies[0].trailers[0];
+      return trailer.hlsUrl; // קישור HLS
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to get Apple trailer:', error);
+    return null;
+  }
+}
+
+// Helper: get movie name from TMDB
+async function getMovieNameFromTmdb(tmdbId) {
+  try {
+    if (!TMDB_API_KEY) return null;
+    const url = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${TMDB_API_KEY}`;
+    const resp = await axios.get(url);
+    return resp.data.title || null;
+  } catch (e) {
+    console.error('TMDB movie name lookup failed:', e.message);
+    return null;
+  }
+}
+
 // Stream endpoint for trailer
 app.get('/stream/:type/:id.json', async (req, res) => {
   try {
@@ -133,30 +165,37 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Get trailer from TMDB
-    const videoId = await getTrailerFromTmdb(tmdbId);
-    console.log('YouTube videoId found:', videoId);
-
-    if (!videoId) {
-      console.log('No video ID found, returning empty streams');
+    // Get movie name from TMDB
+    const movieName = await getMovieNameFromTmdb(tmdbId);
+    if (!movieName) {
+      console.log('Could not get movie name from TMDB');
       return res.json({ streams: [] });
     }
 
-    // Return a single stream with YouTube embed URL
-    const streams = [
-      {
-        name: 'Trailer',
-        title: 'Official Trailer',
-        url: `https://www.youtube.com/embed/${videoId}`,
-        type: 'trailer',
-        source: 'youtube',
-        behaviorHints: {
-          bingeGroup: 'trailer',
+    // Get trailer from Apple Trailers
+    const appleUrl = await getAppleTrailer(movieName);
+    if (appleUrl) {
+      const streams = [
+        {
+          name: 'Trailer (Apple)',
+          title: 'Official Trailer',
+          url: appleUrl,
+          type: 'trailer',
+          source: 'apple',
+          behaviorHints: {
+            bingeGroup: 'trailer',
+          },
         },
-      },
-    ];
-    console.log('Returning streams:', JSON.stringify(streams, null, 2));
-    return res.json({ streams });
+      ];
+      console.log(
+        'Returning Apple trailer stream:',
+        JSON.stringify(streams, null, 2)
+      );
+      return res.json({ streams });
+    } else {
+      console.log('No Apple trailer found');
+      return res.json({ streams: [] });
+    }
   } catch (error) {
     console.error('Detailed error (stream):', {
       message: error.message,
