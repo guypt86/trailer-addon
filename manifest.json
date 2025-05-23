@@ -18,7 +18,8 @@
   "behaviorHints": {
     "adult": false,
     "p2p": false,
-    "configurable": false
+    "configurable": false,
+    "playerType": ["webview", "external"]
   },
   "trailerStreams": true
 }

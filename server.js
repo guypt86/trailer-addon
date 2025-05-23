@@ -146,10 +146,27 @@ app.get('/stream/:type/:id.json', async (req, res) => {
 
     const streams = [
       {
-        name: 'Trailer',
-        title: 'Trailer',
-        url: `https://www.youtube.com/watch?v=${videoId}`,
+        name: 'Trailer (YouTube)',
+        title: 'YouTube Trailer',
         ytId: videoId,
+        source: 'youtube',
+        type: 'trailer',
+      },
+      {
+        name: 'Trailer (Direct)',
+        title: 'Direct Stream',
+        url: `https://www.youtube.com/embed/${videoId}`,
+        source: 'youtube',
+        type: 'trailer',
+        behaviorHints: {
+          notWebReady: false,
+          bingeGroup: `trailer-${videoId}`,
+        },
+      },
+      {
+        name: 'Trailer (Invidious)',
+        title: 'Alternative Player',
+        url: `https://invidious.snopyta.org/watch?v=${videoId}`,
         source: 'youtube',
         type: 'trailer',
       },
