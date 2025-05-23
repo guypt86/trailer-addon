@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: trailer-addon
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: YOUTUBE_API_KEY
+        value: AIzaSyAzhn_Ohq1rAQuUbK1V8em27qqYPNqn7so
