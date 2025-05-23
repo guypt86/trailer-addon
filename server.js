@@ -212,8 +212,15 @@ app.get('/stream/:type/:id.json', async (req, res) => {
     // Return multiple trailer streams with different approaches
     const streams = [
       {
+        name: 'Trailer',
         title: 'Trailer',
+        type: 'Trailer',
         ytId: videoId,
+        source: 'YouTube',
+        behaviorHints: {
+          bingeGroup: `trailer-${videoId}`,
+          notWebReady: false,
+        },
       },
     ];
     console.log('Returning streams:', JSON.stringify(streams, null, 2));
