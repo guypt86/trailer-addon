@@ -1,4 +1,4 @@
-require('dotenv').config();
+demuxingrequire('dotenv').config();
 const express = require('express');
 const { google } = require('googleapis');
 const axios = require('axios');
@@ -204,12 +204,10 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    // Return the trailer as a stream with ytId, url, and externalUrl fields
+    // Return the trailer as a stream with only externalUrl for browser opening
     const streams = [
       {
-        title: 'Trailer',
-        ytId: videoId,
-        url: `https://www.youtube.com/watch?v=${videoId}`,
+        title: 'Trailer (opens in browser)',
         externalUrl: `https://www.youtube.com/watch?v=${videoId}`,
       },
     ];
