@@ -59,45 +59,47 @@ async function getImdbIdFromTmdb(tmdbId) {
   }
 }
 
-// Helper: get movie title from TMDB
-async function getTitleFromTmdb(tmdbId) {
+// Helper: get TMDB ID from IMDb ID
+async function getTmdbIdFromImdb(imdbId) {
   try {
     if (!TMDB_API_KEY) return null;
-    const url = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${TMDB_API_KEY}`;
+    const url = `https://api.themoviedb.org/3/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`;
     const resp = await axios.get(url);
-    return resp.data.title || null;
+    return resp.data.movie_results[0]?.id || null;
   } catch (e) {
-    console.error('TMDB title lookup failed:', e.message);
+    console.error('TMDB lookup failed:', e.message);
     return null;
   }
 }
 
-// Helper: get video ID from YouTube search
-async function getYouTubeVideoId(searchQuery) {
+// Helper: get trailer from TMDB
+async function getTrailerFromTmdb(tmdbId) {
   try {
-    // Encode the search query
-    const encodedQuery = encodeURIComponent(searchQuery);
+    if (!TMDB_API_KEY) return null;
+    const url = `https://api.themoviedb.org/3/movie/${tmdbId}/videos?api_key=${TMDB_API_KEY}`;
+    const resp = await axios.get(url);
 
-    // Make a request to YouTube's search page
-    const response = await axios.get(
-      `https://www.youtube.com/results?search_query=${encodedQuery}`,
-      {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        },
-      }
+    // First try to find an official trailer
+    const trailer = resp.data.results.find(
+      (video) =>
+        video.type === 'Trailer' &&
+        video.site === 'YouTube' &&
+        (video.official || video.name.toLowerCase().includes('official'))
     );
 
-    // Extract video ID using regex
-    const videoIdMatch = response.data.match(/\{"videoId":"([^"]+)"\}/);
-    if (videoIdMatch && videoIdMatch[1]) {
-      return videoIdMatch[1];
+    // If no official trailer, get any trailer
+    if (!trailer) {
+      const anyTrailer = resp.data.results.find(
+        (video) => video.type === 'Trailer' && video.site === 'YouTube'
+      );
+      if (anyTrailer) return anyTrailer.key;
+    } else {
+      return trailer.key;
     }
 
     return null;
-  } catch (error) {
-    console.error('YouTube search failed:', error.message);
+  } catch (e) {
+    console.error('TMDB videos lookup failed:', e.message);
     return null;
   }
 }
@@ -108,43 +110,34 @@ app.get('/stream/:type/:id.json', async (req, res) => {
     const { type, id } = req.params;
     console.log(`Received stream request for ${type} with ID: ${id}`);
 
+    if (!TMDB_API_KEY) {
+      console.error('TMDB API key is not set');
+      return res.status(500).json({ error: 'TMDB API key is not configured' });
+    }
+
     // Support both movies and series
     if (type !== 'movie' && type !== 'series') {
       return res.status(400).json({ error: 'Invalid request' });
     }
 
-    let imdbId = null;
-    let searchQuery = null;
+    let tmdbId = null;
 
     if (id.startsWith('tt')) {
-      imdbId = id;
-      searchQuery = `${imdbId} official trailer`;
+      // Convert IMDb ID to TMDB ID
+      tmdbId = await getTmdbIdFromImdb(id);
+      console.log(`IMDb id ${id} resolved to TMDB id ${tmdbId}`);
     } else if (id.startsWith('tmdb:')) {
-      const tmdbId = id.replace('tmdb:', '');
-      imdbId = await getImdbIdFromTmdb(tmdbId);
-      if (imdbId) {
-        searchQuery = `${imdbId} official trailer`;
-        console.log(`TMDB id ${tmdbId} resolved to IMDb id ${imdbId}`);
-      } else {
-        // fallback: try to get title from TMDB
-        const title = await getTitleFromTmdb(tmdbId);
-        if (title) {
-          searchQuery = `${title} official trailer`;
-          console.log(`TMDB id ${tmdbId} fallback to title: ${title}`);
-        }
-      }
-    } else {
-      // fallback: just use the id as title
-      searchQuery = `${id} official trailer`;
-      console.log(`Unknown id format, fallback to: ${searchQuery}`);
+      tmdbId = id.replace('tmdb:', '');
+      console.log(`Using TMDB id ${tmdbId}`);
     }
 
-    if (!searchQuery) {
+    if (!tmdbId) {
+      console.log('Could not resolve TMDB ID');
       return res.json({ streams: [] });
     }
 
-    console.log('YouTube search query:', searchQuery);
-    const videoId = await getYouTubeVideoId(searchQuery);
+    // Get trailer from TMDB
+    const videoId = await getTrailerFromTmdb(tmdbId);
     console.log('YouTube videoId found:', videoId);
 
     if (!videoId) {
