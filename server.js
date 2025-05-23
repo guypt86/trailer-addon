@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
-const ytdl = require('ytdl-core');
 const fs = require('fs');
 const path = require('path');
 
@@ -101,29 +100,6 @@ async function getTrailerFromTmdb(tmdbId) {
     return null;
   } catch (e) {
     console.error('TMDB videos lookup failed:', e.message);
-    return null;
-  }
-}
-
-// Helper: get direct video URL from YouTube
-async function getDirectVideoUrl(videoId) {
-  try {
-    const info = await ytdl.getInfo(videoId);
-    const format = info.formats.find(
-      (f) =>
-        f.container === 'mp4' &&
-        f.hasVideo &&
-        f.hasAudio &&
-        f.qualityLabel.includes('720p')
-    );
-
-    if (!format) {
-      return null;
-    }
-
-    return format.url;
-  } catch (error) {
-    console.error('Failed to get direct URL:', error.message);
     return null;
   }
 }
