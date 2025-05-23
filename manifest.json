@@ -2,16 +2,16 @@
   "id": "com.trailer.addon",
   "version": "1.0.0",
   "name": "Movie Trailers",
-  "description": "Adds movie trailers from YouTube to Stremio",
+  "description": "Watch movie trailers directly in Stremio",
   "logo": "https://i.imgur.com/1QgrNNw.png",
   "resources": [
     {
       "name": "stream",
-      "types": ["movie", "series"],
+      "types": ["movie"],
       "idPrefixes": ["tt", "tmdb:"]
     }
   ],
-  "types": ["movie", "series"],
+  "types": ["movie"],
   "catalogs": [],
   "background": "https://i.imgur.com/1QgrNNw.png",
   "contactEmail": "example@example.com",
@@ -19,7 +19,6 @@
     "adult": false,
     "p2p": false,
     "configurable": false,
-    "playerType": ["webview", "external"]
-  },
-  "trailerStreams": true
+    "bingeGroup": "trailer"
+  }
 }
