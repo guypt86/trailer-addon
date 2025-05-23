@@ -212,15 +212,7 @@ app.get('/stream/:type/:id.json', async (req, res) => {
     // Return multiple trailer streams with different approaches
     const streams = [
       {
-        title: 'Trailer (opens in browser)',
-        externalUrl: `https://www.youtube.com/watch?v=${videoId}`,
-      },
-      {
-        title: 'Trailer (may fail in player)',
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-      },
-      {
-        title: 'Trailer (YouTube)',
+        title: 'Trailer',
         ytId: videoId,
       },
     ];
