@@ -116,6 +116,34 @@ app.get('/meta/:type/:id.json', async (req, res) => {
   }
 });
 
+const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
+
+// Helper: get IMDb id from TMDB
+async function getImdbIdFromTmdb(tmdbId) {
+  try {
+    if (!TMDB_API_KEY) return null;
+    const url = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${TMDB_API_KEY}`;
+    const resp = await axios.get(url);
+    return resp.data.imdb_id || null;
+  } catch (e) {
+    console.error('TMDB lookup failed:', e.message);
+    return null;
+  }
+}
+
+// Helper: get movie title from TMDB
+async function getTitleFromTmdb(tmdbId) {
+  try {
+    if (!TMDB_API_KEY) return null;
+    const url = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${TMDB_API_KEY}`;
+    const resp = await axios.get(url);
+    return resp.data.title || null;
+  } catch (e) {
+    console.error('TMDB title lookup failed:', e.message);
+    return null;
+  }
+}
+
 // Stream endpoint for trailer
 app.get('/stream/:type/:id.json', async (req, res) => {
   try {
@@ -129,30 +157,59 @@ app.get('/stream/:type/:id.json', async (req, res) => {
         .json({ error: 'YouTube API key is not configured' });
     }
 
-    if (type !== 'movie' || !id.startsWith('tt')) {
-      return res.status(400).json({ error: 'Invalid request' });
+    let imdbId = null;
+    let searchQuery = null;
+
+    if (id.startsWith('tt')) {
+      imdbId = id;
+      searchQuery = `${imdbId} official trailer`;
+    } else if (id.startsWith('tmdb:')) {
+      const tmdbId = id.replace('tmdb:', '');
+      imdbId = await getImdbIdFromTmdb(tmdbId);
+      if (imdbId) {
+        searchQuery = `${imdbId} official trailer`;
+        console.log(`TMDB id ${tmdbId} resolved to IMDb id ${imdbId}`);
+      } else {
+        // fallback: try to get title from TMDB
+        const title = await getTitleFromTmdb(tmdbId);
+        if (title) {
+          searchQuery = `${title} official trailer`;
+          console.log(`TMDB id ${tmdbId} fallback to title: ${title}`);
+        }
+      }
+    } else {
+      // fallback: just use the id as title
+      searchQuery = `${id} official trailer`;
+      console.log(`Unknown id format, fallback to: ${searchQuery}`);
     }
 
+    if (!searchQuery) {
+      return res.json({ streams: [] });
+    }
+
+    console.log('YouTube search query:', searchQuery);
     // Search for trailer on YouTube
     const searchResponse = await youtube.search.list({
       part: 'snippet',
-      q: `${id} official trailer`,
+      q: searchQuery,
       type: 'video',
       maxResults: 1,
       key: process.env.YOUTUBE_API_KEY,
     });
 
     const videoId = searchResponse.data.items[0]?.id.videoId;
+    console.log('YouTube videoId found:', videoId);
 
     if (!videoId) {
       return res.json({ streams: [] });
     }
 
-    // Return the trailer as a stream with ytId
+    // Return the trailer as a stream with ytId and url
     const streams = [
       {
         title: 'Trailer',
         ytId: videoId,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
       },
     ];
     res.json({ streams });
