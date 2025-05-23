@@ -142,98 +142,21 @@ app.get('/stream/:type/:id.json', async (req, res) => {
       return res.json({ streams: [] });
     }
 
-    try {
-      console.log(`Fetching streams for video ID: ${videoId}`);
-
-      // Try multiple instances
-      const instances = [
-        { url: 'https://invidious.snopyta.org', type: 'invidious' },
-        { url: 'https://inv.vern.cc', type: 'invidious' },
-        { url: 'https://invidious.flokinet.to', type: 'invidious' },
-        { url: 'https://invidious.privacydev.net', type: 'invidious' },
-        { url: 'https://invidious.projectsegfau.lt', type: 'invidious' },
-        { url: 'https://invidious.tiekoetter.com', type: 'invidious' },
-        { url: 'https://invidious.nerdvpn.de', type: 'invidious' },
-      ];
-
-      const streams = [];
-
-      for (const instance of instances) {
-        try {
-          console.log(`Trying invidious instance: ${instance.url}`);
-          const url = `${instance.url}/api/v1/videos/${videoId}`;
-          console.log(`Requesting URL: ${url}`);
-          const response = await axios.get(url, {
-            timeout: 5000,
-            validateStatus: (status) => status === 200,
-          });
-          console.log(`Got response from ${instance.url}`);
-
-          // Print all formatStreams and adaptiveFormats
-          if (response.data) {
-            if (response.data.formatStreams) {
-              console.log('formatStreams:', response.data.formatStreams);
-            }
-            if (response.data.adaptiveFormats) {
-              console.log('adaptiveFormats:', response.data.adaptiveFormats);
-            }
-          }
-
-          // Try all formatStreams
-          const allFormats = [
-            ...(response.data.formatStreams || []),
-            ...(response.data.adaptiveFormats || []),
-          ];
-
-          for (const format of allFormats) {
-            if (format.url) {
-              console.log(
-                `Found stream: quality=${
-                  format.quality || 'unknown'
-                }, url=${format.url.substring(0, 40)}...`
-              );
-              streams.push({
-                name: `Trailer (${format.quality || 'unknown'})`,
-                title: 'Official Trailer',
-                url: format.url,
-                type: 'trailer',
-                source: 'youtube',
-                behaviorHints: {
-                  notWebReady: true,
-                  bingeGroup: 'trailer',
-                },
-              });
-              // נחזיר את הראשון שמצאנו
-              break;
-            }
-          }
-
-          if (streams.length > 0) {
-            console.log('Found at least one stream, stopping search');
-            break;
-          } else {
-            console.log(
-              `No valid streams found in response from ${instance.url}`
-            );
-          }
-        } catch (error) {
-          console.error(`Error from ${instance.url}:`, error.message);
-          continue;
-        }
-      }
-
-      console.log(`Found ${streams.length} total streams`);
-      if (streams.length > 0) {
-        console.log('Returning streams:', JSON.stringify(streams, null, 2));
-        return res.json({ streams });
-      } else {
-        console.log('No valid streams found from any instance');
-        return res.json({ streams: [] });
-      }
-    } catch (error) {
-      console.error('Failed to get video streams:', error.message);
-      return res.json({ streams: [] });
-    }
+    // Return a single stream with YouTube embed URL
+    const streams = [
+      {
+        name: 'Trailer',
+        title: 'Official Trailer',
+        url: `https://www.youtube.com/embed/${videoId}`,
+        type: 'trailer',
+        source: 'youtube',
+        behaviorHints: {
+          bingeGroup: 'trailer',
+        },
+      },
+    ];
+    console.log('Returning streams:', JSON.stringify(streams, null, 2));
+    return res.json({ streams });
   } catch (error) {
     console.error('Detailed error (stream):', {
       message: error.message,
